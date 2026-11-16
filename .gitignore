@@ -1,7 +1,14 @@
-.ipynb_checkpoints/
-__pycache__/
-*.pyc
+# Environment Variables
 .venv/
 venv/
-.DS_Store
+
+# Python and Notebook Cache
+__pycache__/
+.ipynb_checkpoints/
+*.pyc
+
+# vs code Cache
 .vscode/
+
+# Desktop Cache
+.DS_Store
