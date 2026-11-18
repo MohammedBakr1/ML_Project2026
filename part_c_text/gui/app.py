@@ -1,192 +1,244 @@
+
 import streamlit as st
+import joblib
+import pandas as pd
+import numpy as np
+from pathlib import Path
+from sklearn.metrics import (
+    ConfusionMatrixDisplay,
+    confusion_matrix,
+    accuracy_score,
+    f1_score
+)
+import matplotlib.pyplot as plt
+
+from preprocessing import clean
+
 
 st.set_page_config(
-    page_title="Parrt_c_test",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-
+    page_title="Egyptian Arabic Sentiment Analysis_Part C",
+    page_icon="",
+    layout="centered"
 )
 
-st.markdown("""
-<style>
-
-/* Main application */
-.stApp {
-    background-color: #F5F7FB;
-}
-
-/* Remove default top padding */
-.block-container {
-    padding-top: 2rem;
-    padding-bottom: 3rem;
-    max-width: 1100px;
-}
-
-/* Header */
-.main-header {
-    text-align: center;
-    padding: 20px 0 15px 0;
-}
-
-.main-header h1 {
-    font-size: 38px;
-    font-weight: 800;
-    color: #172554;
-    margin-bottom: 8px;
-}
-
-.main-header p {
-    color: #64748B;
-    font-size: 16px;
-}
-
-/* Section titles */
-.section-title {
-    color: #1E293B;
-    font-size: 21px;
-    font-weight: 700;
-    margin-bottom: 12px;
-}
-
-/* Cards */
-div[data-testid="stVerticalBlockBorderWrapper"] {
-    background-color: white;
-    border: 1px solid #E2E8F0;
-    border-radius: 16px;
-}
-
-/* Buttons */
-div.stButton > button,
-div[data-testid="stFormSubmitButton"] button {
-    width: 100%;
-    height: 48px;
-    border-radius: 10px;
-    background-color: #4F46E5;
-    color: white;
-    font-weight: 700;
-    border: none;
-    transition: 0.2s;
-}
-
-div.stButton > button:hover,
-div[data-testid="stFormSubmitButton"] button:hover {
-    background-color: #4338CA;
-    color: white;
-}
-
-/* Text area */
-textarea {
-    border-radius: 10px !important;
-}
-
-/* Model description */
-.model-info {
-    background: #EEF2FF;
-    border: 1px solid #C7D2FE;
-    padding: 14px;
-    border-radius: 10px;
-    color: #3730A3;
-    font-size: 14px;
-}
-
-/* Result placeholder */
-.result-box {
-    background: #F8FAFC;
-    border: 1px dashed #CBD5E1;
-    border-radius: 12px;
-    padding: 25px;
-    text-align: center;
-    color: #64748B;
-}
-
-.footer {
-    text-align: center;
-    color: #94A3B8;
-    font-size: 13px;
-    padding-top: 25px;
-}
-
-</style>
-""", unsafe_allow_html=True)
 
 
-st.markdown("""
-<div class="main-header">
-    <h1>Part C</h1>
-    <p>Just Test</p>
-</div>
-""", unsafe_allow_html=True)
+BASE_DIR = Path(__file__).resolve().parent.parent
+MODEL_DIR = BASE_DIR / "saved_models"
+
+
+@st.cache_resource
+def load_models():
+
+    vectorizer = joblib.load(MODEL_DIR / "tfidf_vectorizer.pkl")
+
+    models = {
+        "Logistic Regression": joblib.load(
+            MODEL_DIR / "logistic_regression.pkl"
+        ),
+        "Linear SVM": joblib.load(
+            MODEL_DIR / "linear_svm.pkl"
+        ),
+        "Voting Ensemble": joblib.load(
+            MODEL_DIR / "voting_ensemble.pkl"
+        )  
+    }
+
+    return vectorizer, models
+
+
+@st.cache_resource
+def load_test_data():
+
+    data = joblib.load(MODEL_DIR / "test_data.pkl")
+
+    return data["X_test"], data["y_test"]
+
+vectorizer, models = load_models()
+
+X_test, y_test = load_test_data()
+
+st.title("Part C")
+
+
+st.divider()
+
+st.subheader("Choose Model")
+
+selected_model = st.selectbox(
+    "Select a classification model:",
+    list(models.keys())
+)
+
+review = st.text_area(
+    "Enter Your Text: ",
+    height=150
+)
+
+
+if st.button("Enter", type="primary"):
+
+    if not review.strip():
+
+        st.warning("Please enter a text")
+
+    else:
+
+        cleaned_review = clean(review)
+
+        if not cleaned_review.strip():
+            st.warning("Not avaliable text")
+
+        else:
+            features = vectorizer.transform([cleaned_review])
+
+            model = models[selected_model]
+
+            prediction = model.predict(features)[0]
+
+            st.session_state["prediction"] = (
+                selected_model,
+                "Positive" if prediction == 1 else "Negative"
+            )
+
+
+
+if "prediction" in st.session_state:
+    model_name, result = st.session_state["prediction"]
+
+    st.subheader("Prediction Result")
+    st.write(f"Model: {model_name}")
+
+    if result == "Positive":
+        st.success("Positive Review")
+    else:
+        st.error("Negative Review")
+
 
 st.divider()
 
 
+st.header("Project Information")
 
-st.markdown('<p class="section-title">Model Configuration</p>',
-            unsafe_allow_html=True)
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    evaluation_btn = st.button("Model Evaluation", use_container_width=True)
 
 
-with st.container(border=True):
+with col2:
+    comparison_btn = st.button("Model Comparison", use_container_width=True)
 
-    model_choice = st.radio(
-        "Select your prediction model",
-        [
-            "Logistic Regression",
-            "Linear SVM",
-            "Ensemble"
-        ],
-        horizontal=True
+
+with col3:
+    confusion_btn = st.button("Confusion Matrices", use_container_width=True)
+
+
+
+if evaluation_btn:
+    st.session_state["section"] = "evaluation"
+
+if comparison_btn:
+    st.session_state["section"] = "comparison"
+
+if confusion_btn:
+    st.session_state["section"] = "confusion"
+
+st.divider()
+
+section = st.session_state.get("section", None)
+
+
+
+if section == "evaluation":
+
+    st.subheader("Model Evaluation")
+
+    results = []
+
+    for name, model in models.items():
+
+        y_pred = model.predict(X_test)
+
+        results.append({
+            "Model": name,
+            "Accuracy": accuracy_score(y_test, y_pred),
+            "Precision": __import__("sklearn.metrics", fromlist=["precision_score"]).precision_score(y_test, y_pred, average="macro"),
+            "Recall": __import__("sklearn.metrics", fromlist=["recall_score"]).recall_score(y_test, y_pred, average="macro"),
+            "Macro F1": f1_score(y_test, y_pred, average="macro"),
+            "Weighted F1": f1_score(y_test, y_pred, average="weighted")
+        })
+
+    evaluation_data = pd.DataFrame(results)
+
+    st.dataframe(
+        evaluation_data,
+        use_container_width=True,
+        hide_index=True
     )
 
 
 
-st.write("")
+elif section == "comparison":
 
+    st.subheader("Model Comparison")
 
-st.markdown('<p class="section-title">Customer Review</p>',
-            unsafe_allow_html=True)
+    results = []
 
-with st.container(border=True):
+    for name, model in models.items():
 
-    review = st.text_area(
-        "Enter your customer review below:",
-        placeholder="Example: The product quality is amazing. I really enjoyed using it!",
-        height=180,
-        max_chars=5000,
-        key="review_input"
+        y_pred = model.predict(X_test)
+
+        results.append({
+            "Model": name,
+            "Accuracy (%)": accuracy_score(y_test, y_pred) * 100,
+            "Macro F1": f1_score(y_test, y_pred, average="macro"),
+            "Weighted F1": f1_score(y_test, y_pred, average="weighted")
+        })
+
+    comparison_data = pd.DataFrame(results)
+
+    st.bar_chart(
+        comparison_data.set_index("Model")[["Accuracy (%)"]]
     )
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.caption(f"Characters: {len(review)} / 5000")
-
-    with col2:
-        st.caption(f"Words: {len(review.split())}")
-
-    st.progress(min(len(review) / 5000, 1.0))
+    st.dataframe(
+        comparison_data,
+        use_container_width=True,
+        hide_index=True
+    )
 
 
-st.write("")
+elif section == "confusion":
 
+    st.subheader("Confusion Matrices")
 
-predict_clicked = st.button(
-    "Predict Sentiment",
-    use_container_width=True
-)
+    for name, model in models.items():
 
-if predict_clicked:
+        y_pred = model.predict(X_test)
 
-    if not review.strip():
-
-        st.warning("Please enter a customer review first.")
-
-    else:
-
-        st.info(
-            f"""
-            **برضو ده تجربة انت بجد مستني نتيجة ؟؟؟**
-
-            Selected Model: `{model_choice}`
-
-            """
+        cm = confusion_matrix(
+            y_test,
+            y_pred,
+            labels=[0, 1]
         )
+
+        st.markdown(f"### {name}")
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        display = ConfusionMatrixDisplay(
+            confusion_matrix=cm,
+            display_labels=["Negative", "Positive"]
+        )
+
+        display.plot(
+            ax=ax,
+            cmap="Blues",
+            colorbar=False
+        )
+
+        st.pyplot(fig)
+        plt.close(fig)
+
+
