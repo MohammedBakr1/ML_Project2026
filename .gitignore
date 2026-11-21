@@ -12,3 +12,6 @@ __pycache__/
 
 # Desktop Cache
 .DS_Store
+
+# mlflow database
+mlflow.db
