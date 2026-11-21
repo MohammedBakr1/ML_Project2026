@@ -1,0 +1,96 @@
+TF-IDF vocabulary size: Egyptian=20000, MSA=20000 (max_features=20000, 1-2 grams, min_df=2)
+Egyptian cleaning steps kept: ['egy_stop', 'emoji', 'lex', 'letters', 'neg', 'prefix', 'stem']
+Split train/val/test = 25363/5435/5435 (stratified, seed 42)
+Best C: Egy LR=3.0, Egy SVM=0.3, MSA LR=3.0, MSA SVM=0.3; NB alpha=0.3; NumPy lr=1.0, l2=1e-06
+
+=== MSA baseline - LR ===
+Accuracy: 0.8815
+Confusion matrix (rows=true, cols=pred):
+[[1699  372]
+ [ 272 3092]]
+                   precision    recall  f1-score   support
+
+Not satisfied (0)     0.8620    0.8204    0.8407      2071
+    Satisfied (1)     0.8926    0.9191    0.9057      3364
+
+         accuracy                         0.8815      5435
+        macro avg     0.8773    0.8698    0.8732      5435
+     weighted avg     0.8809    0.8815    0.8809      5435
+
+=== MSA baseline - SVM ===
+Accuracy: 0.8828
+Confusion matrix (rows=true, cols=pred):
+[[1701  370]
+ [ 267 3097]]
+                   precision    recall  f1-score   support
+
+Not satisfied (0)     0.8643    0.8213    0.8423      2071
+    Satisfied (1)     0.8933    0.9206    0.9067      3364
+
+         accuracy                         0.8828      5435
+        macro avg     0.8788    0.8710    0.8745      5435
+     weighted avg     0.8822    0.8828    0.8822      5435
+
+=== Egyptian - LR (sklearn) ===
+Accuracy: 0.8861
+Confusion matrix (rows=true, cols=pred):
+[[1717  354]
+ [ 265 3099]]
+                   precision    recall  f1-score   support
+
+Not satisfied (0)     0.8663    0.8291    0.8473      2071
+    Satisfied (1)     0.8975    0.9212    0.9092      3364
+
+         accuracy                         0.8861      5435
+        macro avg     0.8819    0.8751    0.8782      5435
+     weighted avg     0.8856    0.8861    0.8856      5435
+
+=== Egyptian - Linear SVM ===
+Accuracy: 0.8865
+Confusion matrix (rows=true, cols=pred):
+[[1717  354]
+ [ 263 3101]]
+                   precision    recall  f1-score   support
+
+Not satisfied (0)     0.8672    0.8291    0.8477      2071
+    Satisfied (1)     0.8975    0.9218    0.9095      3364
+
+         accuracy                         0.8865      5435
+        macro avg     0.8824    0.8754    0.8786      5435
+     weighted avg     0.8860    0.8865    0.8860      5435
+
+=== Egyptian - Voting (LR+SVM+NB) ===
+Accuracy: 0.8876
+Confusion matrix (rows=true, cols=pred):
+[[1722  349]
+ [ 262 3102]]
+                   precision    recall  f1-score   support
+
+Not satisfied (0)     0.8679    0.8315    0.8493      2071
+    Satisfied (1)     0.8989    0.9221    0.9103      3364
+
+         accuracy                         0.8876      5435
+        macro avg     0.8834    0.8768    0.8798      5435
+     weighted avg     0.8871    0.8876    0.8871      5435
+
+=== Egyptian - LR (NumPy scratch) ===
+Accuracy: 0.8857
+Confusion matrix (rows=true, cols=pred):
+[[1707  364]
+ [ 257 3107]]
+                   precision    recall  f1-score   support
+
+Not satisfied (0)     0.8691    0.8242    0.8461      2071
+    Satisfied (1)     0.8951    0.9236    0.9091      3364
+
+         accuracy                         0.8857      5435
+        macro avg     0.8821    0.8739    0.8776      5435
+     weighted avg     0.8852    0.8857    0.8851      5435
+
+                        Model  Accuracy  Macro-F1  P(neg)  R(neg)  F1(neg)  P(pos)  R(pos)  F1(pos)
+            MSA baseline - LR    0.8815    0.8732  0.8620  0.8204   0.8407  0.8926  0.9191   0.9057
+           MSA baseline - SVM    0.8828    0.8745  0.8643  0.8213   0.8423  0.8933  0.9206   0.9067
+      Egyptian - LR (sklearn)    0.8861    0.8782  0.8663  0.8291   0.8473  0.8975  0.9212   0.9092
+        Egyptian - Linear SVM    0.8865    0.8786  0.8672  0.8291   0.8477  0.8975  0.9218   0.9095
+Egyptian - Voting (LR+SVM+NB)    0.8876    0.8798  0.8679  0.8315   0.8493  0.8989  0.9221   0.9103
+Egyptian - LR (NumPy scratch)    0.8857    0.8776  0.8691  0.8242   0.8461  0.8951  0.9236   0.9091

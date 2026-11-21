@@ -1,244 +1,419 @@
 
 import streamlit as st
 import joblib
-import pandas as pd
 import numpy as np
-from pathlib import Path
-from sklearn.metrics import (
-    ConfusionMatrixDisplay,
-    confusion_matrix,
-    accuracy_score,
-    f1_score
-)
+import pandas as pd
 import matplotlib.pyplot as plt
 
-from preprocessing import clean
-
-
-st.set_page_config(
-    page_title="Egyptian Arabic Sentiment Analysis_Part C",
-    page_icon="",
-    layout="centered"
-)
-
+from pathlib import Path
+from preprocessing import make_cleaner
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-MODEL_DIR = BASE_DIR / "saved_models"
+DATASET_DIR = BASE_DIR / "Dataset"
+
+ARTIFACTS_PATH = DATASET_DIR / "artifacts.joblib"
+NUMPY_PARAMS_PATH = DATASET_DIR / "numpy_lr_params.npz"
+RESULTS_PATH = DATASET_DIR / "egy_test_results_summary.csv"
+CONFUSION_MATRIX_PATH = DATASET_DIR / "egy_confusion_matrices.png"
+
+CLASS_NAMES = ["Not satisfied", "Satisfied"]
+
+MODEL_INFO = {
+    "MSA baseline - Logistic Regression": {
+        "key": "msa_lr",
+        "pipeline": "MSA",
+        "vectorizer": "msa",
+        "result_name": "MSA baseline - LR",
+    },
+    "MSA baseline - SVM": {
+        "key": "msa_svm",
+        "pipeline": "MSA",
+        "vectorizer": "msa",
+        "result_name": "MSA baseline - SVM",
+    },
+    "Egyptian - Logistic Regression (sklearn)": {
+        "key": "egy_lr",
+        "pipeline": "Egyptian",
+        "vectorizer": "egy",
+        "result_name": "Egyptian - LR (sklearn)",
+    },
+    "Egyptian - SVM": {
+        "key": "egy_svm",
+        "pipeline": "Egyptian",
+        "vectorizer": "egy",
+        "result_name": "Egyptian - Linear SVM",
+    },
+    "Egyptian - Voting (Logistic Regression + SVM + Naive Bayes)": {
+        "key": "egy_voting",
+        "pipeline": "Egyptian",
+        "vectorizer": "egy",
+        "result_name": "Egyptian - Voting (LR+SVM+NB)",
+    },
+    "Egyptian - Logistic Regression (NumPy scratch)": {
+        "key": "numpy_lr",
+        "pipeline": "Egyptian",
+        "vectorizer": "egy",
+        "result_name": "Egyptian - LR (NumPy scratch)",
+    },
+}
+
+CONFUSION_MATRICES = {
+    "msa_lr": [
+        [1699, 372],
+        [272, 3092]
+    ],
+    "msa_svm": [
+        [1701, 370],
+        [267, 3097]
+    ],
+    "egy_lr": [
+        [1717, 354],
+        [265, 3099]
+    ],
+    "egy_svm": [
+        [1717, 354],
+        [263, 3101]
+    ],
+    "egy_voting": [
+        [1722, 349],
+        [262, 3102]
+    ],
+    "numpy_lr": [
+        [1707, 364],
+        [257, 3107]
+    ]
+}
 
 
 @st.cache_resource
-def load_models():
+def load_artifacts():
+    artifacts = joblib.load(ARTIFACTS_PATH)
+    params = np.load(NUMPY_PARAMS_PATH)
 
-    vectorizer = joblib.load(MODEL_DIR / "tfidf_vectorizer.pkl")
-
-    models = {
-        "Logistic Regression": joblib.load(
-            MODEL_DIR / "logistic_regression.pkl"
-        ),
-        "Linear SVM": joblib.load(
-            MODEL_DIR / "linear_svm.pkl"
-        ),
-        "Voting Ensemble": joblib.load(
-            MODEL_DIR / "voting_ensemble.pkl"
-        )  
+    numpy_params = {
+        "w": params["w"].reshape(-1),
+        "b": float(params["b"].reshape(-1)[0]),
     }
 
-    return vectorizer, models
+    return artifacts, numpy_params
 
 
-@st.cache_resource
-def load_test_data():
-
-    data = joblib.load(MODEL_DIR / "test_data.pkl")
-
-    return data["X_test"], data["y_test"]
-
-vectorizer, models = load_models()
-
-X_test, y_test = load_test_data()
-
-st.title("Part C")
+@st.cache_data
+def load_saved_results():
+    return pd.read_csv(RESULTS_PATH)
 
 
-st.divider()
+artifacts, numpy_params = load_artifacts()
 
-st.subheader("Choose Model")
-
-selected_model = st.selectbox(
-    "Select a classification model:",
-    list(models.keys())
-)
-
-review = st.text_area(
-    "Enter Your Text: ",
-    height=150
-)
+models = artifacts["models"]
+vectorizers = artifacts["vectorizers"]
+configs = artifacts["preprocessing_config"]
 
 
-if st.button("Enter", type="primary"):
+def numpy_predict(X):
+    w = numpy_params["w"]
+    b = numpy_params["b"]
 
-    if not review.strip():
+    scores = np.asarray(X @ w).reshape(-1) + b
+    scores = np.clip(scores, -500, 500)
 
-        st.warning("Please enter a text")
+    probabilities = 1 / (1 + np.exp(-scores))
 
+    return (probabilities >= 0.5).astype(int)
+
+
+def predict_model(model_name, X):
+    model_key = MODEL_INFO[model_name]["key"]
+
+    if model_key == "numpy_lr":
+        return numpy_predict(X)
+
+    return models[model_key].predict(X)
+
+
+def predict_text(model_name, text):
+    info = MODEL_INFO[model_name]
+
+    if info["pipeline"] == "MSA":
+        cfg = configs["msa_cfg"]
     else:
+        cfg = configs["egy_cfg"]
 
-        cleaned_review = clean(review)
+    cleaner = make_cleaner(cfg)
+    cleaned_text = cleaner(text)
 
-        if not cleaned_review.strip():
-            st.warning("Not avaliable text")
+    vectorizer = vectorizers[info["vectorizer"]]
+    features = vectorizer.transform([cleaned_text])
 
-        else:
-            features = vectorizer.transform([cleaned_review])
+    prediction = predict_model(model_name, features)
 
-            model = models[selected_model]
+    return int(prediction[0]), cleaned_text
 
-            prediction = model.predict(features)[0]
 
-            st.session_state["prediction"] = (
-                selected_model,
-                "Positive" if prediction == 1 else "Negative"
+def get_saved_model_result(model_name, results_df):
+    result_name = MODEL_INFO[model_name]["result_name"]
+
+    row = results_df[results_df["Model"] == result_name]
+
+    if row.empty:
+        raise ValueError(f"Saved results do not contain: {result_name}")
+
+    return row.iloc[0]
+
+
+def display_confusion_matrix(model_name):
+
+    model_key = MODEL_INFO[model_name]["key"]
+    cm = np.array(CONFUSION_MATRICES[model_key])
+
+    fig, ax = plt.subplots(figsize=(6, 5))
+
+    image = ax.imshow(cm, cmap="Blues")
+
+    ax.set_title(f"Confusion Matrix - {model_name}")
+
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("True")
+
+    ax.set_xticks([0, 1])
+    ax.set_yticks([0, 1])
+
+    ax.set_xticklabels(CLASS_NAMES)
+    ax.set_yticklabels(CLASS_NAMES)
+
+    for i in range(2):
+        for j in range(2):
+            ax.text(
+                j, i, cm[i, j],
+                ha="center",
+                va="center",
+                color="white" if cm[i, j] > cm.max() / 2 else "black",
+                fontsize=13
             )
 
+    fig.colorbar(image, ax=ax)
+
+    st.pyplot(fig)
+    plt.close(fig)
 
 
-if "prediction" in st.session_state:
-    model_name, result = st.session_state["prediction"]
+st.set_page_config(
+    page_title="Part C",
+    page_icon="",
+    layout="wide",
+)
 
-    st.subheader("Prediction Result")
-    st.write(f"Model: {model_name}")
-
-    if result == "Positive":
-        st.success("Positive Review")
-    else:
-        st.error("Negative Review")
-
-
-st.divider()
-
-
-st.header("Project Information")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    evaluation_btn = st.button("Model Evaluation", use_container_width=True)
-
-
-with col2:
-    comparison_btn = st.button("Model Comparison", use_container_width=True)
-
-
-with col3:
-    confusion_btn = st.button("Confusion Matrices", use_container_width=True)
-
-
-
-if evaluation_btn:
-    st.session_state["section"] = "evaluation"
-
-if comparison_btn:
-    st.session_state["section"] = "comparison"
-
-if confusion_btn:
-    st.session_state["section"] = "confusion"
+st.title("Arabic Customer Reviews - Sentiment Analysis")
 
 st.divider()
 
-section = st.session_state.get("section", None)
+
+# Sidebar
+
+st.sidebar.title("Model Configuration")
+
+pipeline = st.sidebar.selectbox(
+    "",
+    ["Egyptian", "MSA"]
+)
+
+available_models = [
+    name for name, info in MODEL_INFO.items()
+    if info["pipeline"] == pipeline
+]
+
+model_name = st.sidebar.selectbox(
+    "",
+    available_models
+)
 
 
+# Tabs
 
-if section == "evaluation":
+prediction_tab, evaluation_tab, comparison_tab = st.tabs([
+    "Sentiment Prediction",
+    "Model Evaluation",
+    "Model Comparison"
+])
 
-    st.subheader("Model Evaluation")
 
-    results = []
+# Sentiment Prediction
 
-    for name, model in models.items():
+with prediction_tab:
 
-        y_pred = model.predict(X_test)
+    st.header("Enter Your Text")
 
-        results.append({
-            "Model": name,
-            "Accuracy": accuracy_score(y_test, y_pred),
-            "Precision": __import__("sklearn.metrics", fromlist=["precision_score"]).precision_score(y_test, y_pred, average="macro"),
-            "Recall": __import__("sklearn.metrics", fromlist=["recall_score"]).recall_score(y_test, y_pred, average="macro"),
-            "Macro F1": f1_score(y_test, y_pred, average="macro"),
-            "Weighted F1": f1_score(y_test, y_pred, average="weighted")
+    review = st.text_area(
+        "",
+        height=150
+    )
+
+    if st.button("Analyze Review", type="primary"):
+
+        if not review.strip():
+            st.warning("Please enter a review first.")
+
+        else:
+            try:
+                prediction, cleaned_text = predict_text(
+                    model_name,
+                    review
+                )
+
+                st.subheader("Prediction Result")
+
+                if prediction == 1:
+                    st.success("Satisfied (Positive Review)")
+                else:
+                    st.error("Not satisfied (Negative Review)")
+
+            except Exception as e:
+                st.error(f"Prediction error: {e}")
+
+
+# Model Evaluation
+
+with evaluation_tab:
+
+    st.header("Model Evaluation")
+
+    try:
+        results_df = load_saved_results()
+
+        metrics = get_saved_model_result(
+            model_name,
+            results_df
+        )
+
+        st.write(f"Model: **{model_name}**")
+
+        col1, col2 = st.columns(2)
+
+        col1.metric(
+            "Accuracy",
+            f"{metrics['Accuracy'] * 100:.2f}%"
+        )
+
+        col2.metric(
+            "Macro-F1",
+            f"{metrics['Macro-F1'] * 100:.2f}%"
+        )
+
+        st.subheader("Class Metrics")
+
+        class_metrics = pd.DataFrame({
+            "Class": CLASS_NAMES,
+            "Precision": [
+                metrics["P(neg)"],
+                metrics["P(pos)"]
+            ],
+            "Recall": [
+                metrics["R(neg)"],
+                metrics["R(pos)"]
+            ],
+            "F1-Score": [
+                metrics["F1(neg)"],
+                metrics["F1(pos)"]
+            ],
         })
 
-    evaluation_data = pd.DataFrame(results)
-
-    st.dataframe(
-        evaluation_data,
-        use_container_width=True,
-        hide_index=True
-    )
-
-
-
-elif section == "comparison":
-
-    st.subheader("Model Comparison")
-
-    results = []
-
-    for name, model in models.items():
-
-        y_pred = model.predict(X_test)
-
-        results.append({
-            "Model": name,
-            "Accuracy (%)": accuracy_score(y_test, y_pred) * 100,
-            "Macro F1": f1_score(y_test, y_pred, average="macro"),
-            "Weighted F1": f1_score(y_test, y_pred, average="weighted")
-        })
-
-    comparison_data = pd.DataFrame(results)
-
-    st.bar_chart(
-        comparison_data.set_index("Model")[["Accuracy (%)"]]
-    )
-
-    st.dataframe(
-        comparison_data,
-        use_container_width=True,
-        hide_index=True
-    )
-
-
-elif section == "confusion":
-
-    st.subheader("Confusion Matrices")
-
-    for name, model in models.items():
-
-        y_pred = model.predict(X_test)
-
-        cm = confusion_matrix(
-            y_test,
-            y_pred,
-            labels=[0, 1]
+        st.dataframe(
+            class_metrics.style.format({
+                "Precision": "{:.4f}",
+                "Recall": "{:.4f}",
+                "F1-Score": "{:.4f}",
+            }),
+            use_container_width=True,
+            hide_index=True
         )
 
-        st.markdown(f"### {name}")
+        st.subheader("Confusion Matrices")
 
-        fig, ax = plt.subplots(figsize=(6, 4))
+        display_confusion_matrix(model_name)
 
-        display = ConfusionMatrixDisplay(
-            confusion_matrix=cm,
-            display_labels=["Negative", "Positive"]
+    
+    except FileNotFoundError as e:
+        st.error(f"Required results file was not found: {e.filename}")
+
+    except Exception as e:
+        st.error(f"Evaluation display error: {e}")
+
+
+# Model Comparison
+
+with comparison_tab:
+
+    st.header("Compare All Models")
+
+    try:
+        results_df = load_saved_results()
+
+        display_columns = [
+            "Model",
+            "Accuracy",
+            "Macro-F1",
+            "P(neg)",
+            "R(neg)",
+            "F1(neg)",
+            "P(pos)",
+            "R(pos)",
+            "F1(pos)",
+        ]
+
+        results_df = results_df[display_columns].sort_values(
+            by="Macro-F1",
+            ascending=False
+        ).reset_index(drop=True)
+
+        st.subheader("Performance Summary")
+
+        st.dataframe(
+            results_df.style.format({
+                col: "{:.4f}"
+                for col in display_columns
+                if col != "Model"
+            }),
+            use_container_width=True,
+            hide_index=True
         )
 
-        display.plot(
-            ax=ax,
-            cmap="Blues",
-            colorbar=False
+        best_model = results_df.iloc[0]
+
+        st.success(
+            f"Best model by Macro-F1: {best_model['Model']} "
+            f"({best_model['Macro-F1']:.4f})"
         )
 
-        st.pyplot(fig)
-        plt.close(fig)
+        st.subheader("Accuracy and Macro-F1 Comparison")
 
+        chart_data = results_df.set_index("Model")[[
+            "Accuracy",
+            "Macro-F1"
+        ]]
 
+        st.bar_chart(chart_data)
+
+        csv = results_df.to_csv(index=False).encode("utf-8")
+
+        st.download_button(
+            "Download Comparison CSV",
+            data=csv,
+            file_name="model_comparison.csv",
+            mime="text/csv"
+        )
+
+        st.subheader("Confusion Matrices")
+        
+        if CONFUSION_MATRIX_PATH.exists():
+        
+            st.image(
+                str(CONFUSION_MATRIX_PATH),
+                use_container_width=True
+            )
+
+    except FileNotFoundError as e:
+        st.error(f"Required results file was not found: {e.filename}")
+
+    except Exception as e:
+        st.error(f"Comparison display error: {e}")
