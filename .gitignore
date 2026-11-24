@@ -16,3 +16,4 @@ __pycache__/
 # mlflow database
 mlflow.db
 part_b_images/data/
+part_b_images/cache/
