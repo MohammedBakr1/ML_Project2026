@@ -1,7 +1,7 @@
 model,features,param,train_acc,val_acc,val_macro_f1
-KNN,hist,"k=1, w=uniform",1.0,0.6792,0.68
-KNN,pca,"k=1, w=uniform",1.0,0.5427,0.5404
-KNN,raw,"k=1, w=uniform",1.0,0.5256,0.5226
-LogReg,hist,C=0.1,0.7749,0.6109,0.6103
-LogReg,pca,C=0.01,0.7325,0.4061,0.4062
-LogReg,raw,C=0.0001,0.617,0.43,0.4295
+KNN,hist,"k=1, w=uniform",1.0,0.3177,0.3177
+KNN,pca,"k=1, w=uniform",1.0,0.1672,0.1635
+KNN,raw,"k=1, w=uniform",1.0,0.1672,0.1595
+LogReg,hist,C=10,0.9258,0.3478,0.3448
+LogReg,pca,C=0.0001,0.6087,0.2709,0.2153
+LogReg,raw,C=0.001,0.9031,0.1873,0.1951
