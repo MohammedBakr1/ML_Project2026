@@ -1,0 +1,4 @@
+model,features,setting,accuracy,macro_f1,silhouette
+Logistic Regression,hist,C=10,0.3061,0.3018,
+KNN,hist,"k=1, weights=uniform",0.2687,0.2607,
+K-Means (mapped),hist,n_clusters=5,0.2993,0.2427,0.1687
